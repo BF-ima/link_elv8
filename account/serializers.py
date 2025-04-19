@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Personne, Startup, BureauEtude, PersonneProfile, StartupProfile, BureauEtudeProfile, Chat, Message, MessageAttachment
+from .models import Personne, Startup, BureauEtude, PersonneProfile, StartupProfile, BureauEtudeProfile, Chat, Message, MessageAttachment, Feedback
 from django.contrib.auth.password_validation import validate_password 
 from rest_framework.exceptions import ValidationError
 from django.contrib.auth.hashers import make_password
@@ -72,36 +72,38 @@ class BureauEtudeSerializer(serializers.ModelSerializer):
     class Meta:
         model = Startup
         fields = ['nom', 'adresse', 'numero_telephone', 'email', 'wilaya', 'description', 'date_creation']
-        read_only_fields = ['id_bureau']       
+        read_only_fields = ['id_bureau']  
+
+class FeedbackSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Feedback
+        fields = ['id', 'bureau', 'startup', 'personne', 'comment', 'rating', 'created_at']
+
 
 class PersonneProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = PersonneProfile
-        fields = ['photo', 'linkedin', 'created_at', 'updated_at']
-        read_only_fields = ['created_at', 'updated_at']
-
-
-class StartupProfileSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = StartupProfile
-        fields = ['logo', 'site_web', 'social_media', 'stade_developpement', 'created_at', 'updated_at']
-        read_only_fields = ['created_at', 'updated_at']
-
+        fields = '__all__'
 
 class BureauEtudeProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = BureauEtudeProfile
-        fields = ['logo', 'site_web', 'domaines_expertise', 'created_at', 'updated_at']
-        read_only_fields = ['created_at', 'updated_at'] 
+        fields = '__all__'
 
+class StartupProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StartupProfile
+        fields = '__all__'
 
+   # Both the sender and the receiver can see the attachments — but only the sender uses uploaded_files to upload them
+# Correct indentation and file validation inside the proper serializer
 class MessageAttachmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = MessageAttachment
         fields = ['id', 'file', 'file_name', 'file_size', 'file_type', 'created_at']
         read_only_fields = ['id', 'created_at']
 
-
+# Inside the MessageSerializer class (assuming it's here where the uploaded files are processed)
 class MessageSerializer(serializers.ModelSerializer):
     attachments = MessageAttachmentSerializer(many=True, read_only=True)
     uploaded_files = serializers.ListField(
@@ -120,6 +122,14 @@ class MessageSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'timestamp', 'is_read', 'read_at']
     
+    # ✅ Validation for uploaded files
+    def validate_uploaded_files(self, value):
+        max_size = 5 * 1024 * 1024  # 5 MB limit
+        for file in value:
+            if file.size > max_size:
+                raise serializers.ValidationError(f"The file '{file.name}' exceeds the maximum size of 5MB.")
+        return value
+
     def create(self, validated_data):
         uploaded_files = validated_data.pop('uploaded_files', None)
         

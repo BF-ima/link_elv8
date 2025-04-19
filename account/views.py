@@ -1,7 +1,7 @@
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.decorators import api_view
-from .serializers import PersonneSerializer, StartupSerializer, BureauEtudeSerializer, RegisterStartupSerializer, RegisterSerializer, ChatSerializer, MessageSerializer
+from .serializers import PersonneSerializer, StartupSerializer, BureauEtudeSerializer, RegisterStartupSerializer, RegisterSerializer, ChatSerializer, MessageSerializer, PersonneProfileSerializer, StartupProfileSerializer, BureauEtudeProfileSerializer, FeedbackSerializer 
 from rest_framework.permissions import AllowAny
 from rest_framework import generics
 from rest_framework.views import APIView
@@ -18,6 +18,63 @@ from .models import (
     MessageAttachment, StartupMember
 )
 
+from .permissions import IsOwnerOrReadOnly, IsStartupOrPersonne
+
+
+class FeedbackViewSet(viewsets.ModelViewSet):
+    serializer_class = FeedbackSerializer
+    permission_classes = [permissions.IsAuthenticated, IsStartupOrPersonne]
+
+
+    def get_queryset(self):
+        # Allow all logged-in users to see all feedbacks
+        return Feedback.objects.all()
+
+    def perform_create(self, serializer):
+        user = self.request.user
+
+        bureau = None
+        startup = None
+        personne = None
+
+        # Determine which user type is sending the feedback
+        if hasattr(user, 'startupprofile'):
+            startup = user.startupprofile.startup
+        elif hasattr(user, 'personneprofile'):
+            personne = user.personneprofile.personne
+
+        # Assume feedback is for a specific bureau, passed via request data
+        bureau_id = self.request.data.get('bureau_id')
+        bureau = BureauEtude.objects.get(id=bureau_id)
+
+        serializer.save(bureau=bureau, startup=startup, personne=personne)
+
+
+class PersonneProfileViewSet(viewsets.ModelViewSet):
+    serializer_class = PersonneProfileSerializer
+    queryset = PersonneProfile.objects.all()
+    permission_classes = [permissions.IsAuthenticated, IsOwnerOrReadOnly]
+
+    def perform_create(self, serializer):
+        serializer.save(personne=self.request.user)
+
+
+class StartupProfileViewSet(viewsets.ModelViewSet):
+    serializer_class = StartupProfileSerializer
+    queryset = StartupProfile.objects.all()
+    permission_classes = [permissions.IsAuthenticated, IsOwnerOrReadOnly]
+
+    def perform_create(self, serializer):
+        serializer.save(startup=self.request.user)
+
+
+class BureauEtudeProfileViewSet(viewsets.ModelViewSet):
+    serializer_class = BureauEtudeProfileSerializer
+    queryset = BureauEtudeProfile.objects.all()
+    permission_classes = [permissions.IsAuthenticated, IsOwnerOrReadOnly]
+
+    def perform_create(self, serializer):
+        serializer.save(bureau=self.request.user)
 
 
 class ChatViewSet(viewsets.ModelViewSet):
@@ -71,40 +128,45 @@ class MessageViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         chat_id = self.kwargs.get('chat_pk') or self.request.query_params.get('chat_id')
-        if chat_id:
-            return Message.objects.filter(chat_id=chat_id).order_by('timestamp')
-        return Message.objects.none()
+        user = self.request.user
+        if not chat_id:
+            return Message.objects.none()
+
+        queryset = Message.objects.filter(chat_id=chat_id).order_by('timestamp')
+
+        # Automatically mark unread messages as read
+        if hasattr(user, 'id_bureau'):
+            receiver_type = 'bureau'
+            receiver_id = user.id_bureau
+        elif hasattr(user, 'id_startup'):
+            receiver_type = 'startup'
+            receiver_id = user.id_startup
+        else:
+            return queryset  # unknown user, don't touch
+
+        unread_messages = queryset.filter(
+            receiver_type=receiver_type,
+            receiver_id=receiver_id,
+            is_read=False
+        )
+
+        now = timezone.now()
+        unread_messages.update(is_read=True, read_at=now)
+
+        return queryset
+
+             
     
     def create(self, request, *args, **kwargs):
-        # Set sender info based on authenticated user
-        user = request.user
-        
-        if hasattr(user, 'id_bureau'):
-            sender_type = 'bureau'
-            sender_id = user.id_bureau
-        elif hasattr(user, 'id_startup'):
-            sender_type = 'startup'
-            sender_id = user.id_startup
-        else:
-            return Response(
-                {'error': 'Unknown user type'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-            
-        # Add sender info to the data
-        data = request.data.copy()
-        data['sender_type'] = sender_type
-        data['sender_id'] = sender_id
-        
-        # Create the message
-        serializer = self.get_serializer(data=data)
+    # Use the provided sender info instead of overriding it
+        serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
-        
+    
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     
     @action(detail=True, methods=['post'])
-    def mark_as_read(self, request, pk=None):
+    def mark_as_read(self, request, pk=None, chat_pk=None):
         message = self.get_object()
         message.mark_as_read()
         return Response({'status': 'message marked as read'})

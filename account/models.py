@@ -152,23 +152,66 @@ class StartupMember(models.Model):
     def __str__(self):
         return f"{self.personne.nom} - {self.startup.nom}"
 
+
+class Feedback(models.Model):
+    bureau = models.ForeignKey(BureauEtude, on_delete=models.CASCADE)
+    startup = models.ForeignKey(Startup, on_delete=models.CASCADE, null=True, blank=True)
+    personne = models.ForeignKey(Personne, on_delete=models.CASCADE, null=True, blank=True)
+    
+    comment = models.TextField()
+    rating = models.IntegerField(choices=[(i, str(i)) for i in range(1, 6)])  # 1 to 5 stars
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Feedback ({self.rating}★) from {self.startup or self.personne} to {self.bureau}"
+       
+
 class PersonneProfile(models.Model):
-    # Added profile model for Personne
     personne = models.OneToOneField(Personne, on_delete=models.CASCADE, related_name='profile')
-    photo = models.ImageField(upload_to='profile_photos', blank=True, null=True)
+
+    avatar = models.ImageField(upload_to='personne_avatars/', blank=True, null=True)
+    
+    first_name = models.CharField(max_length=100)
+    last_name = models.CharField(max_length=100)
+    
+    date_of_birth = models.DateField()
+    gender = models.CharField(max_length=10, choices=[("Male", "Male"), ("Female", "Female")])
+    
+    bio = models.TextField(blank=True, null=True)  # e.g., "Co-CEO of Startup"
+
+    phone = models.CharField(max_length=20)
+
+    email = models.EmailField()
+    location = models.CharField(max_length=255)
+
+    facebook = models.URLField(blank=True, null=True)
     linkedin = models.URLField(blank=True, null=True)
+    whatsapp = models.CharField(max_length=20, blank=True, null=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"Profile of {self.personne.nom}"                
+        return f"{self.first_name} {self.last_name} Profile"               
 
 class BureauEtudeProfile(models.Model):
-    # Added profile model for BureauEtude
     bureau = models.OneToOneField(BureauEtude, on_delete=models.CASCADE, related_name='profile')
-    logo = models.ImageField(upload_to='bureau_logos', blank=True, null=True)
-    site_web = models.URLField(blank=True, null=True)
-    domaines_expertise = models.TextField(blank=True, null=True)
+
+    avatar = models.ImageField(upload_to='bureau_avatars/', blank=True, null=True)
+    bio = models.TextField(blank=True, null=True, help_text="Short description or role (e.g., CEO of ConsultingName)")
+
+    phone = models.CharField(max_length=20, blank=True, null=True)
+    email = models.EmailField(blank=True, null=True)
+    location = models.CharField(max_length=255)
+
+    date_creation = models.DateField(null=True)
+
+    facebook = models.URLField(blank=True, null=True)
+    linkedin = models.URLField(blank=True, null=True)
+    whatsapp = models.CharField(max_length=20, blank=True, null=True)
+
+    website = models.URLField(blank=True, null=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -176,17 +219,60 @@ class BureauEtudeProfile(models.Model):
         return f"Profile of {self.bureau.nom}"
 
 class StartupProfile(models.Model):
-    # Added profile model for Startup
     startup = models.OneToOneField(Startup, on_delete=models.CASCADE, related_name='profile')
+
+    ## leader info 
+
+    leader_avatar = models.ImageField(upload_to='personne_avatars/', blank=True, null=True)
+    
+    leader_first_name = models.CharField(max_length=100)
+    leader_last_name = models.CharField(max_length=100)
+    
+    leader_date_of_birth = models.DateField()
+    leader_gender = models.CharField(max_length=10, choices=[("Male", "Male"), ("Female", "Female")])
+    
+    leader_bio = models.TextField(blank=True, null=True)  # e.g., "Co-CEO of Startup"
+
+    leader_phone = models.CharField(max_length=20)
+
+    leader_email = models.EmailField()
+    leader_location = models.CharField(max_length=255)
+
+    leader_facebook = models.URLField(blank=True, null=True)
+    leader_linkedin = models.URLField(blank=True, null=True)
+    leader_whatsapp = models.CharField(max_length=20, blank=True, null=True)
+
+    
+    ## startup info 
+
     logo = models.ImageField(upload_to='startup_logos', blank=True, null=True)
-    site_web = models.URLField(blank=True, null=True)
-    social_media = models.JSONField(blank=True, null=True)  # Store social media links as JSON
-    stade_developpement = models.CharField(max_length=100, blank=True, null=True)
+    owner_name = models.CharField(max_length=100)  # "Owned by Fatima Ben Ali"
+    
+    phone = models.CharField(max_length=10)
+
+    email = models.EmailField()
+    location = models.CharField(max_length=255)  # e.g., "Algeria, Sidi Bel Abbes"
+
+    industry = models.CharField(max_length=100)
+    description = models.TextField()
+
+    website = models.URLField(blank=True, null=True)
+    
+    date_creation = models.DateField(null=True)
+
+    facebook = models.URLField(blank=True, null=True)
+    linkedin = models.URLField(blank=True, null=True)
+    whatsapp = models.CharField(max_length=20, blank=True, null=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    #  memebers of the startup
+
+    members = models.ManyToManyField('Personne', related_name='startups')
+
     def __str__(self):
-        return f"Profile of {self.startup.nom}"   
+        return f"Profile of {self.startup.name}"  
 
 
 class Chat(models.Model):
